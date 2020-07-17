@@ -7,6 +7,7 @@ configfile: "config.yaml"
 rule all:
     input:
         expand("../output/DifferentialSplicing/{AnalysisName}_cluster_significance.txt", AnalysisName=samples.index),
+        expand( "clustering/{AnalysisName}/leafcutter_perind_numers.counts.fixed.gz", AnalysisName=samples.index),
         expand("../output/CountTables/{AnalysisName}.numers.gz", AnalysisName=samples.index),
 
 include: "rules/other.smk"
@@ -26,6 +27,17 @@ rule leafcutter_clustering:
         ./scripts/leafcutter_cluster.py -j {input.leafcutter_juncfile} -r clustering/{wildcards.AnalysisName} {params.Extra} &> {log}
         """
 
+rule fix_leafcutter_cluster_names:
+    input:
+        "clustering/{AnalysisName}/leafcutter_perind_numers.counts.gz"
+    output:
+        "clustering/{AnalysisName}/leafcutter_perind_numers.counts.fixed.gz"
+    shell:
+        """
+        zcat {input} | perl -lne 'if ($.==1) {{$_ =~ s/(\w+)/id$1/g; print}} else {{print}}' | gzip - > {output}
+        """
+
+
 rule make_numers_and_denoms:
     input:
         "clustering/{AnalysisName}/leafcutter_perind_numers.counts.gz"
@@ -40,7 +52,7 @@ rule make_numers_and_denoms:
 
 rule leafcutter_ds:
     input:
-        JuncCountTable = "clustering/{AnalysisName}/leafcutter_perind_numers.counts.gz",
+        JuncCountTable = "clustering/{AnalysisName}/leafcutter_perind_numers.counts.fixed.gz",
         groupfile = lambda wildcards: samples.at[wildcards.AnalysisName, "GroupsFile"]
     output:
         "../output/DifferentialSplicing/{AnalysisName}_effect_sizes.txt",
