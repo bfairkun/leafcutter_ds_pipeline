@@ -1,0 +1,2 @@
+AnalyisName	JunctionsFileListForClustering	GroupsFile	ClusteringExtraParams	DsExtraParams
+SF3B1K700E_v_WT	../data/juncfiles/sf3b1_k700e_wt.juncfile.tsv	../data/groupfiles/sf3b1_k700e_wt.groups.tsv		

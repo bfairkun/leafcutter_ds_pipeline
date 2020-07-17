@@ -1,0 +1,59 @@
+# The main entry point of your workflow.
+# After configuring, running snakemake -n in a clone of this repository should successfully execute a dry-run of the workflow.
+
+include: "rules/common.smk"
+configfile: "config.yaml"
+
+rule all:
+    input:
+        expand("../output/DifferentialSplicing/{AnalysisName}_cluster_significance.txt", AnalysisName=samples.index),
+        expand("../output/CountTables/{AnalysisName}.numers.gz", AnalysisName=samples.index),
+
+include: "rules/other.smk"
+
+rule leafcutter_clustering:
+    input:
+        leafcutter_juncfile = lambda wildcards: samples.at[wildcards.AnalysisName, "JunctionsFileListForClustering"]
+    output:
+        "clustering/{AnalysisName}/leafcutter_perind.counts.gz",
+        "clustering/{AnalysisName}/leafcutter_perind_numers.counts.gz"
+    params:
+        Extra = lambda wildcards: samples.at[wildcards.AnalysisName, "ClusteringExtraParams"]
+    log:
+        "logs/leafcutter_clustering/{AnalysisName}.log"
+    shell:
+        """
+        ./scripts/leafcutter_cluster.py -j {input.leafcutter_juncfile} -r clustering/{wildcards.AnalysisName} {params.Extra} &> {log}
+        """
+
+rule make_numers_and_denoms:
+    input:
+        "clustering/{AnalysisName}/leafcutter_perind_numers.counts.gz"
+    output:
+        numers = "../output/CountTables/{AnalysisName}.numers.gz",
+        denoms = "../output/CountTables/{AnalysisName}.denoms.gz"
+    shell:
+        """
+        zcat {input} | perl -lne 'if ($.==1) {{print}} else {{$_ =~ s/\d+\///g; print}}' | gzip - > {output.denoms}
+        zcat {input} | perl -lne 'if ($.==1) {{print}} else {{$_ =~ s/\/\d+//g; print}}' | gzip - > {output.numers}
+        """
+
+rule leafcutter_ds:
+    input:
+        JuncCountTable = "clustering/{AnalysisName}/leafcutter_perind_numers.counts.gz",
+        groupfile = lambda wildcards: samples.at[wildcards.AnalysisName, "GroupsFile"]
+    output:
+        "../output/DifferentialSplicing/{AnalysisName}_effect_sizes.txt",
+        "../output/DifferentialSplicing/{AnalysisName}_cluster_significance.txt"
+    threads: 4
+    params:
+        outputprefix = "../output/DifferentialSplicing/{AnalysisName}",
+        extra_params = lambda wildcards: samples.at[wildcards.AnalysisName, "DsExtraParams"] 
+    log:
+        "logs/leafcutter_ds/{AnalysisName}.log"
+    # conda:
+        # "envs/leafcutter.yml"
+    shell:
+        """
+        leafcutter_ds.R -p {threads} -o {params.outputprefix} {params.extra_params} {input.JuncCountTable} {input.groupfile} &> {log}
+        """
